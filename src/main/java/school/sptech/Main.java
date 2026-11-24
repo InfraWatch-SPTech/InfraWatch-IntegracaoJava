@@ -1,8 +1,13 @@
 package school.sptech;
 
+import io.github.cdimascio.dotenv.Dotenv;
 import school.sptech.config.S3Provider;
+import school.sptech.controller.JiraController;
 import school.sptech.model.Alerta;
 import school.sptech.dao.AlertaDAO;
+import school.sptech.model.DadosHardwareModelo;
+import school.sptech.service.AlertaService;
+import school.sptech.service.S3Service;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
@@ -13,6 +18,8 @@ public class Main {
 
     public static void main(String[] args)
     {
+        Dotenv dotenv = Dotenv.load();
+
         System.out.println("Alertas no banco de dados:");
 
         AlertaDAO alertaDAO = new AlertaDAO();
@@ -23,24 +30,17 @@ public class Main {
             System.out.println(alerta);
         }
 
+        S3Client s3Client = new S3Provider().criarClienteS3();
+        S3Service readerService = new S3Service(s3Client);
 
+        DadosHardwareModelo dados = readerService.lerUltimoArquivoJson("gold-api-java", "NovaTech Solucoes", "8");
 
-        S3Provider provider = new S3Provider();
-
-        try (S3Client s3 = provider.criarClienteS3()) {
-
-            System.out.println("Cliente S3 criado com sucesso!");
-
-            s3.listBuckets().buckets().forEach(bucket ->
-                    System.out.println("Bucket: " + bucket.name())
-            );
-
-        } catch (Exception e) {
-            System.out.println("Erro ao conectar com S3:");
-            e.printStackTrace();
+        if (dados!= null)
+        {
+            JiraController jira = new JiraController(dotenv.get("JIRA_BASE_URL"), dotenv.get("JIRA_EMAIL"), dotenv.get("JIRA_API_TOKEN"));
+            AlertaService alertaService = new AlertaService(jira);
+            alertaService.verificarEEnviarAlertas(dados);
         }
-
-
 
         // Inserindo um novo filme a partir de um objeto
 
