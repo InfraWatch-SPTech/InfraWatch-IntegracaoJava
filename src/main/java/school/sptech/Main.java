@@ -1,7 +1,11 @@
 package school.sptech;
 
+import school.sptech.config.S3Provider;
 import school.sptech.model.Alerta;
-import school.sptech.model.AlertaDAO;
+import school.sptech.dao.AlertaDAO;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.util.List;
 
@@ -18,6 +22,25 @@ public class Main {
         for (Alerta alerta : alertas) {
             System.out.println(alerta);
         }
+
+
+
+        S3Provider provider = new S3Provider();
+
+        try (S3Client s3 = provider.criarClienteS3()) {
+
+            System.out.println("Cliente S3 criado com sucesso!");
+
+            s3.listBuckets().buckets().forEach(bucket ->
+                    System.out.println("Bucket: " + bucket.name())
+            );
+
+        } catch (Exception e) {
+            System.out.println("Erro ao conectar com S3:");
+            e.printStackTrace();
+        }
+
+
 
         // Inserindo um novo filme a partir de um objeto
 

@@ -1,7 +1,9 @@
-package school.sptech.model;
+package school.sptech.dao;
 
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import school.sptech.model.Alerta;
+import school.sptech.config.DBConnectionProvider;
 
 import java.util.List;
 
