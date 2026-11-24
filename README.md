@@ -1,4 +1,4 @@
-# conexao-banco-de-dados
+# InfraWatch-IntegracaoJava
 
 Projeto Java para testar conexao com banco de dados usando `JDBC`, `Spring JDBC` e `JdbcTemplate`.
 
