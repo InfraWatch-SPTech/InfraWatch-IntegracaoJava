@@ -19,17 +19,6 @@ public class Main {
     public static void main(String[] args)
     {
         Dotenv dotenv = Dotenv.load();
-
-        System.out.println("Alertas no banco de dados:");
-
-        AlertaDAO alertaDAO = new AlertaDAO();
-
-        List<Alerta> alertas = alertaDAO.buscarTodos();
-
-        for (Alerta alerta : alertas) {
-            System.out.println(alerta);
-        }
-
         S3Client s3Client = new S3Provider().criarClienteS3();
         S3Service readerService = new S3Service(s3Client);
 

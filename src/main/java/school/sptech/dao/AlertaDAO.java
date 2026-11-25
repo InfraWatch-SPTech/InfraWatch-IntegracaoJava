@@ -6,6 +6,7 @@ import school.sptech.model.Alerta;
 import school.sptech.config.DBConnectionProvider;
 
 import java.util.List;
+import java.util.Map;
 
 // Executa SQL e recupera os alertas
 public class AlertaDAO
@@ -18,7 +19,7 @@ public class AlertaDAO
         this.connection = dbConnectionProvider.getConnection();
     }
 
-    public List<Alerta> buscarTodos()
+    /*public List<Alerta> buscarTodos()
     {
         String sql = """
             SELECT
@@ -46,13 +47,68 @@ public class AlertaDAO
         List<Alerta> alertas = connection.query(sql, new BeanPropertyRowMapper<>(Alerta.class));
 
         return alertas;
-    }
+    }*/
 
     public String buscarEquipamento(String id)
     {
         String sql = "SELECT nome FROM equipamento WHERE idEquipamento = ?";
 
         return connection.queryForObject(sql, String.class, id);
+    }
+
+    public Integer buscarIdEquipamentoPorId(Integer id)
+    {
+        String sql = "SELECT idEquipamento FROM equipamento WHERE idEquipamento = ?";
+
+        return connection.queryForObject(sql, Integer.class, id);
+    }
+
+    public Integer buscarIdEquipamentoPorNome(String nome)
+    {
+        String sql = "SELECT idEquipamento FROM equipamento WHERE nome = ?";
+
+        return connection.queryForObject(sql, Integer.class, nome);
+    }
+
+    // Busca no banco todos os componentes e limites ativos para este equipamento
+    public List<Map<String, Object>> buscarParametrosAtivos(Integer idEquipamento)
+    {
+        String sql = """
+            SELECT p.fkComponente, p.limite_atencao, p.limite_critico, c.nome AS nome_componente, c.tipo AS tipo_componente
+            FROM parametro_alerta p
+            JOIN componente c ON p.fkComponente = c.idComponente
+            WHERE p.fkEquipamento = ? AND p.ativo = 1;
+        """;
+
+        return connection.queryForList(sql, idEquipamento);
+    }
+
+    public void salvar(Alerta alerta)
+    {
+        String sql = """
+                INSERT INTO alerta (
+                jira_key,
+                fkEquipamento,
+                fkComponente,
+                tipo_alerta,
+                valor_medido,
+                limite_violado,
+                status_alerta)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """;
+
+        connection.update(
+                sql,
+                alerta.getJiraKey(),
+                alerta.getFkEquipamento(),
+                alerta.getFkComponente(),
+                alerta.getTipoAlerta(),
+                alerta.getValorMedido(),
+                alerta.getLimiteViolado(),
+                alerta.getStatusAlerta()
+        );
+
+        // criado_em entra sozinho porque tem default
     }
 
 }
