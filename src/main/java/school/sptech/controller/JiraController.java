@@ -1,10 +1,7 @@
 package school.sptech.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import school.sptech.dto.IssueFieldsDto;
-import school.sptech.dto.IssueRequestDto;
-import school.sptech.dto.IssueTypeDto;
-import school.sptech.dto.ProjectDto;
+import school.sptech.dto.*;
 
 import java.io.IOException;
 import java.net.URI;
@@ -35,12 +32,13 @@ public class JiraController
         this.objectMapper = new ObjectMapper();
     }
 
-    public String createIssue(String projectKey, String summary, String issueType)
+    public String createIssue(String projectKey, String summary, String descriptionText, String issueType)
             throws IOException, InterruptedException {
         // Monta o corpo da requisição usando os DTOs
         ProjectDto project = new ProjectDto(projectKey);
         IssueTypeDto type = new IssueTypeDto(issueType);
-        IssueFieldsDto fields = new IssueFieldsDto(project, summary, type);
+        DescriptionDto description = new DescriptionDto(descriptionText);
+        IssueFieldsDto fields = new IssueFieldsDto(project, summary, description, type);
         IssueRequestDto issueRequest = new IssueRequestDto(fields);
 
         // Transforma o objeto Java em JSON

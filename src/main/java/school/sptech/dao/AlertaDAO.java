@@ -47,4 +47,12 @@ public class AlertaDAO
 
         return alertas;
     }
+
+    public String buscarEquipamento(String id)
+    {
+        String sql = "SELECT nome FROM equipamento WHERE idEquipamento = ?";
+
+        return connection.queryForObject(sql, String.class, id);
+    }
+
 }

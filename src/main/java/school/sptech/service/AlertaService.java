@@ -3,13 +3,14 @@ package school.sptech.service;
 import org.springframework.jdbc.core.JdbcTemplate;
 import school.sptech.config.DBConnectionProvider;
 import school.sptech.controller.JiraController;
+import school.sptech.dao.AlertaDAO;
 import school.sptech.model.DadosHardwareModelo;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-public class AlertaService
+public class AlertaService extends AlertaDAO
 {
     private final JdbcTemplate template;
     private final JiraController jira;
@@ -49,15 +50,18 @@ public class AlertaService
     /**
      * Verifica os componentes configurados e ativos para o equipamento no banco.
      */
-    public void verificarEEnviarAlertas(DadosHardwareModelo dados) {
-        if (dados == null) {
+    public void verificarEEnviarAlertas(DadosHardwareModelo dados)
+    {
+        if (dados == null)
+        {
             System.err.println("Objeto DadosHardwareModelo está nulo.");
             return;
         }
 
         Integer idEquipamento = buscarIdEquipamento(dados.getEquipamento());
 
-        if (idEquipamento == null) {
+        if (idEquipamento == null)
+        {
             System.err.println("Processamento interrompido: equipamento não encontrado no banco MySQL.");
             return;
         }
@@ -90,7 +94,7 @@ public class AlertaService
             Double valorMedio = extrairValorMetrica(dados, tipoComp, nomeComp);
 
             if (valorMedio != null) {
-                avaliarEEnviarAlerta(nomeComp, valorMedio, limiteAtencao, limiteCritico);
+                avaliarEEnviarAlerta(dados, nomeComp, valorMedio, limiteAtencao, limiteCritico);
             } else {
                 System.out.println("Métrica não encontrada no JSON para o componente: " + nomeComp);
             }
@@ -121,29 +125,74 @@ public class AlertaService
     /**
      * Compara o valor lido com os limites e dispara a issue no Jira
      */
-    private void avaliarEEnviarAlerta(String nomeComponente, Double valorMedio, Double limiteAtencao, Double limiteCritico) {
-        try {
-            String mensagemCritica = String.format("ALERTA CRÍTICO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);
-            String mensagemAtencao = String.format("ALERTA DE ATENÇÃO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);
+    private void avaliarEEnviarAlerta(DadosHardwareModelo dados, String nomeComponente, Double valorMedio, Double limiteAtencao, Double limiteCritico)
+    {
+        String tipoAlerta;
+        Double limiteUsado;
 
-            if (valorMedio >= limiteCritico) {
-                System.out.println("Disparando Alerta Crítico no Jira para " + nomeComponente);
+        try
+        {
+            /*String mensagemCritica = String.format("ALERTA CRÍTICO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);
+            String mensagemAtencao = String.format("ALERTA DE ATENÇÃO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);*/
+
+            if (valorMedio >= limiteCritico)
+            {
+                tipoAlerta = "CRITICO";
+                limiteUsado = limiteCritico;
+
+                /*System.out.println("Disparando Alerta Crítico no Jira para " + nomeComponente);
                 String response = jira.createIssue("KAN", mensagemCritica, "Task");
-                System.out.println("Issue criada no Jira: " + response);
+                System.out.println("Issue criada no Jira: " + response);*/
 
-            } else if (valorMedio >= limiteAtencao) {
-                System.out.println("Disparando Alerta de Atenção no Jira para " + nomeComponente);
-                String response = jira.createIssue("KAN", mensagemAtencao, "Task");
-                System.out.println("Issue criada no Jira: " + response);
-
-            } else {
-                System.out.println("Componente " + nomeComponente + " (Média: " + valorMedio + "%) dentro dos limites.");
             }
 
-        } catch (IOException | InterruptedException e) {
+            else if (valorMedio >= limiteAtencao)
+            {
+                tipoAlerta = "ALERTA";
+                limiteUsado = limiteAtencao;
+
+                /*System.out.println("Disparando Alerta de Atenção no Jira para " + nomeComponente);
+                String response = jira.createIssue("KAN", mensagemAtencao, "Task");
+                System.out.println("Issue criada no Jira: " + response);*/
+
+            }
+
+            else
+            {
+                System.out.println("Componente " + nomeComponente + " (Média: " + valorMedio + "%) dentro dos limites.");
+                return; // impedir envio quando nao tiver alerta
+            }
+
+            String summary = String.format("[%s] %s em %.1f%% - %s",
+                    tipoAlerta,
+                    nomeComponente,
+                    valorMedio,
+                    buscarEquipamento(dados.getEquipamento()));
+
+            String descriptionText = String.format(
+                    "Empresa: %s | Equipamento: %s | Componente: %s | Tipo: %s | Valor medido: %.1f | Limite definido: %.1f",
+                    dados.getEmpresa(),
+                    buscarEquipamento(dados.getEquipamento()),
+                    nomeComponente,
+                    tipoAlerta,
+                    valorMedio,
+                    limiteUsado
+            );
+
+            System.out.println("Disparando alerta no Jira para " + nomeComponente);
+            String response = jira.createIssue("KAN", summary, descriptionText, "Task");
+            System.out.println("Issue criada no Jira: " + response);
+
+        }
+
+        catch (IOException | InterruptedException e)
+        {
             System.err.println("Erro ao comunicar com a API do Jira: " + e.getMessage());
             e.printStackTrace();
-        } catch (Exception e) {
+        }
+
+        catch (Exception e)
+        {
             System.err.println("Erro ao processar alerta para " + nomeComponente + ": " + e.getMessage());
         }
     }
