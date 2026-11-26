@@ -1,122 +1,90 @@
 # InfraWatch-IntegracaoJava
 
-Projeto Java que integra tres pontos do fluxo de monitoramento:
+Sistema Java puro para monitorar equipamentos, consultar arquivos JSON no S3, comparar metricas com limites cadastrados no MySQL e abrir chamados no Jira quando necessario.
 
-1. leitura do ultimo JSON gerado no S3;
-2. comparacao das metricas com os limites cadastrados no MySQL;
-3. criacao de chamado no Jira quando uma regra de alerta e violada.
+Nao ha Spring Boot. O projeto usa `JdbcTemplate` para banco, AWS SDK v2 para S3, Jackson para leitura de JSON, `HttpClient` para o Jira e `dotenv-java` para configuracao externa.
 
-O projeto esta em uma etapa de integracao entre fontes de dados e sistemas externos. Ele nao usa Spring Boot. O que existe hoje e uma aplicacao Java pura, com `JdbcTemplate` para o banco, AWS SDK para o S3, Jackson para leitura de JSON e `HttpClient` para a comunicacao com o Jira.
+## Objetivo
 
-## Objetivo atual
+Detectar quando um equipamento ultrapassa os limites de alerta configurados para seus componentes, registrar o chamado no Jira e manter o historico sincronizado com o banco.
 
-O objetivo do sistema e identificar quando um equipamento ultrapassa os limites configurados para seus componentes, abrir uma issue no Jira com o contexto do alerta e persistir esse chamado no banco para manter historico e rastreabilidade.
+## Diagrama
 
-## Como o projeto esta organizado
+![Diagrama de classes](diagrama.png)
+
+## Estrutura
 
 ### `Main`
-Ponto de entrada da aplicacao. Ele monta as dependencias, busca o ultimo arquivo do S3 e dispara o processamento principal do alerta.
+Ponto de entrada da aplicacao. Ele cria as dependencias, agenda as rotinas e mantem a aplicacao em execucao.
 
 ### `config`
-- `S3Provider`: cria o cliente AWS S3 a partir das variaveis de ambiente.
-- `DBConnectionProvider`: monta o `JdbcTemplate` usado pelos DAO para falar com o MySQL.
+- `S3Provider`: cria o cliente AWS S3 com as credenciais do `.env`.
+- `DBConnectionProvider`: monta o `JdbcTemplate` usado pelos DAO.
 
 ### `service`
-- `S3Service`: encontra o JSON mais recente no bucket e converte o conteudo para `DadosHardwareModelo`.
-- `AlertaService`: concentra a regra de negocio do alerta. Ele cruza o JSON com os parametros ativos do banco, decide se o alerta e critico ou de atencao, cria a issue no Jira e pede a persistencia do chamado.
+- `S3Service`: localiza o JSON mais recente de um equipamento, baixa o arquivo e converte para `DadosHardwareModelo`.
+- `AlertaService`: concentra a regra de negocio do alerta, cria issues no Jira, persiste o chamado e sincroniza o status com o banco.
+- `MonitorarArquivosS3Task`: varre todos os equipamentos da empresa no S3 e dispara o processamento de alertas.
+- `SincronizacaoChamadosTask`: consulta periodicamente o Jira para atualizar os status dos chamados no banco.
 
 ### `controller`
-- `JiraController`: faz a comunicacao HTTP com a API do Jira para criar issues.
-- `AlertaController`: existe como classe de apoio, mas nao faz parte do fluxo principal atual.
+- `JiraController`: faz a comunicacao com a API do Jira para criar e consultar issues.
+- `AlertaController`: existe como apoio, mas nao faz parte do fluxo principal atual.
 
 ### `dao`
-- `AlertaDAO`: executa as consultas SQL relacionadas aos alertas e tambem busca informacoes auxiliares de equipamento e parametros de alerta.
+- `AlertaDAO`: executa consultas SQL sobre alertas, parametros, equipamentos e controle de arquivos ja processados.
 
 ### `model`
 - `DadosHardwareModelo`: representa o JSON lido do S3.
 - `Alerta`: representa o alerta consolidado que sera persistido no banco.
 
 ### `dto`
-Esses objetos montam o payload enviado ao Jira:
+Objetos usados para montar o payload enviado ao Jira:
 - `ProjectDto`
 - `IssueTypeDto`
 - `IssueRequestDto`
 - `IssueFieldsDto`
 - `DescriptionDto`
 
-## Fluxo completo de execucao
+## Fluxo atual
 
-### 1. Inicio em `Main`
-`Main.main()` carrega as variaveis do `.env`, cria o cliente do S3 e instancia o `S3Service`.
+### 1. Inicializacao
+`Main.main()` carrega o `.env`, cria o cliente do S3, instancia o `S3Service`, o `JiraController`, o `AlertaService` e o `AlertaDAO`.
 
-Em seguida, ele chama:
+Depois disso, ele cria um `ScheduledExecutorService` com duas threads e agenda duas rotinas em paralelo:
+- varredura do S3 por equipamento;
+- sincronizacao de status dos chamados no Jira.
 
-```java
-readerService.lerUltimoArquivoJson("gold-api-java", "NovaTech Solucoes", "8")
-```
+### 2. Varredura do S3
+`MonitorarArquivosS3Task` busca todos os equipamentos da empresa no banco e percorre cada `idEquipamento` separadamente.
 
-Esse valor mostra que o fluxo atual trabalha com um bucket, uma empresa e um equipamento especificos.
-
-### 2. Leitura do arquivo no S3
-`S3Service.lerUltimoArquivoJson(...)` monta o prefixo:
+Para cada equipamento, o `S3Service` procura o ultimo JSON no caminho:
 
 ```text
-gold/{empresa}/{equipamento}/
+gold/{empresa}/{idEquipamento}/
 ```
 
-Depois ele:
-- lista os objetos nesse caminho;
-- filtra os arquivos `.json`;
-- escolhe o mais recente pela data de ultima modificacao;
-- baixa o conteudo;
-- converte o JSON para `DadosHardwareModelo`.
+Se nao existir arquivo novo, a task segue para o proximo equipamento. Se houver JSON valido, o conteudo e convertido para `DadosHardwareModelo` e enviado para o `AlertaService`.
 
-Se nenhum JSON existir ou se houver erro na conversao, o metodo retorna `null` e o fluxo principal nao avanca.
+### 3. Tratamento do alerta
+`AlertaService.verificarEEnviarAlertas(...)` identifica o equipamento, busca os parametros ativos no banco e cruza cada componente monitorado com a metrica correspondente no JSON.
 
-### 3. Cria as dependencias do alerta
-Se o JSON foi lido com sucesso, `Main` cria:
+O modelo aceita nomes alternativos para as metricas, como CPU, Processador, RAM, Memoria, Disco, Armazenamento e similares.
 
-- `JiraController`
-- `AlertaService`
+### 4. Classificacao
+Quando existe valor medido, o service compara com os limites cadastrados:
 
-O `JiraController` recebe as credenciais do Jira vindas do `.env`. O `AlertaService` recebe essa instancia do Jira para poder abrir chamados quando necessario.
+- valor maior ou igual ao limite critico: alerta `CRITICO`;
+- valor maior ou igual ao limite de atencao: alerta `ATENCAO`;
+- abaixo dos limites: nada e enviado ao Jira.
 
-### 4. Inicio da regra de negocio
-`AlertaService.verificarEEnviarAlertas(dados)` recebe o modelo vindo do S3 e inicia o processamento.
+### 5. Criacao do chamado
+Quando ha violacao de limite, o `JiraController` monta o payload da issue e envia a requisicao de criacao.
 
-A primeira responsabilidade desse metodo e descobrir qual equipamento do banco corresponde ao valor recebido no JSON. Para isso, ele chama `buscarIdEquipamento(...)`, que tenta primeiro resolver por ID numerico e, se necessario, por nome.
+A descricao e enviada no formato ADF exigido pela API v3 do Jira.
 
-### 5. Busca dos parametros ativos no banco
-Com o equipamento identificado, o service chama `AlertaDAO.buscarParametrosAtivos(idEquipamento)`.
-
-Essa consulta traz os componentes monitorados daquele equipamento, seus limites de atencao e critico, o nome do componente e o tipo cadastrado no banco.
-
-### 6. Relacionamento entre componente e metrica do JSON
-Para cada componente retornado do banco, `AlertaService` chama `extrairValorMetrica(...)`.
-
-Esse metodo usa o tipo e o nome do componente para descobrir qual campo do JSON corresponde a ele. O modelo `DadosHardwareModelo` possui suporte a nomes alternativos para as metricas, entao o fluxo aceita variações como CPU, Processador, RAM, Memoria e similares.
-
-Se a metrica nao existir no JSON, o componente e apenas logado e o fluxo segue para o proximo.
-
-### 7. Avaliacao da severidade
-Quando existe valor medido, `AlertaService.avaliarEEnviarAlerta(...)` compara o valor com os limites:
-
-- se o valor for maior ou igual ao limite critico, o alerta e tratado como `CRITICO`;
-- se for maior ou igual ao limite de atencao, o alerta e tratado como `ALERTA`;
-- se estiver abaixo dos limites, nada e enviado para o Jira.
-
-### 8. Montagem do chamado no Jira
-Quando ha alerta, o service monta duas informacoes:
-
-- `summary`: titulo curto da issue;
-- `descriptionText`: descricao detalhada do alerta.
-
-O `JiraController.createIssue(...)` recebe esses dados, monta o payload em ADF para o campo `description` e envia a requisicao para o endpoint de criacao de issues do Jira.
-
-### 9. Persistencia do chamado no banco
-A resposta do Jira retorna a `key` da issue criada.
-
-O service extrai essa key, monta um objeto `Alerta` com:
+### 6. Persistencia e deduplicacao
+A resposta do Jira retorna a `key` da issue criada. O alerta e persistido no banco com:
 
 - `jiraKey`
 - `fkEquipamento`
@@ -124,37 +92,42 @@ O service extrai essa key, monta um objeto `Alerta` com:
 - `tipoAlerta`
 - `valorMedido`
 - `limiteViolado`
+- `statusAlerta`
+- `resolvidoEm`
+- `arquivoLido`
 
-Depois ele chama `alertaDAO.salvar(alerta)` para persistir o chamado no banco.
+O campo `arquivoLido` evita que o mesmo JSON seja processado duas vezes.
 
-### 10. Resultado final
-Ao final do processo, o sistema:
+### 7. Sincronizacao de status
+`SincronizacaoChamadosTask` roda periodicamente e chama o service para consultar as issues abertas no Jira.
 
-- le o JSON mais recente do S3;
-- identifica os componentes relevantes;
-- verifica quais passaram dos limites;
-- cria a issue no Jira;
-- salva o registro do alerta no banco.
+Quando o status muda para concluido, a aplicacao atualiza o banco com o status `Concluído` e preenche `resolvidoEm` internamente, sem depender da data vinda do Jira.
 
-## Responsabilidade de cada classe principal
+## Classes principais
 
 ### `school.sptech.Main`
-Coordena a inicializacao da aplicacao e chama o fluxo principal.
+Coordena a inicializacao e o agendamento das tasks.
 
 ### `school.sptech.service.S3Service`
 Localiza o arquivo mais recente no S3 e converte o JSON para objeto Java.
 
-### `school.sptech.model.DadosHardwareModelo`
-Modela os dados lidos do JSON e faz o mapeamento de metricas com nomes alternativos.
+### `school.sptech.service.MonitorarArquivosS3Task`
+Percorre os equipamentos da empresa e dispara o fluxo de alerta.
+
+### `school.sptech.service.SincronizacaoChamadosTask`
+Dispara a rotina de sincronizacao com o Jira.
 
 ### `school.sptech.service.AlertaService`
-Aplica as regras de negocio do alerta e integra S3, MySQL e Jira.
+Aplica as regras de negocio e integra S3, MySQL e Jira.
 
 ### `school.sptech.dao.AlertaDAO`
-Executa as consultas SQL usadas pelo fluxo de alerta.
+Executa as consultas SQL usadas pelo fluxo.
 
 ### `school.sptech.controller.JiraController`
-Monta e envia a requisicao HTTP para o Jira.
+Monta e envia as requisicoes HTTP para o Jira.
+
+### `school.sptech.model.DadosHardwareModelo`
+Modela os dados lidos do JSON e tolera variacoes de nome nas metricas.
 
 ### `school.sptech.model.Alerta`
 Transporta os dados do chamado consolidado para persistencia.
@@ -162,7 +135,7 @@ Transporta os dados do chamado consolidado para persistencia.
 ### `school.sptech.dto.*`
 Estruturam o payload esperado pelo Jira.
 
-## Variaveis de ambiente esperadas
+## Variaveis de ambiente
 
 O projeto usa `dotenv-java` para carregar configuracoes do arquivo `.env`.
 
@@ -180,13 +153,13 @@ Variaveis usadas no codigo atual:
 - `JIRA_EMAIL`
 - `JIRA_API_TOKEN`
 
-## Observacoes importantes
+## Observacoes
 
 - O fluxo principal esta concentrado em `Main`, nao em Spring Boot.
-- O caminho do S3, a empresa e o equipamento usados no processamento estao fixos na chamada atual do `Main`.
-- O projeto foi desenhado em camadas, mas ainda com uma estrutura simples, sem container de injeccao de dependencia.
+- O processamento do S3 agora percorre todos os equipamentos da empresa, usando `idEquipamento` como pasta no bucket.
+- O projeto permanece simples, sem container de injeccao de dependencia.
 
-## Tecnologias usadas
+## Tecnologias
 
 - Java 21
 - Maven

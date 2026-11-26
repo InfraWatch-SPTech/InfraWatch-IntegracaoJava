@@ -5,6 +5,7 @@ import school.sptech.model.Alerta;
 
 import java.util.List;
 
+// Mantido como ponto de apoio para operações futuras relacionadas a alertas.
 public class AlertaController
 {
     private final AlertaDAO alertaDAO;

@@ -3,6 +3,7 @@ package school.sptech.service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+// Tarefa agendada que dispara a sincronização dos chamados com o Jira em intervalos fixos.
 public class SincronizacaoChamadosTask implements Runnable
 {
     private static final DateTimeFormatter FORMATO_LOG = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -20,8 +21,7 @@ public class SincronizacaoChamadosTask implements Runnable
         System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
     }
 
-    // Recebe o service já pronto porque ele é quem concentra a regra de negócio; a tarefa só
-    // serve para disparar essa regra de tempos em tempos.
+    // Recebe o service já pronto porque a tarefa apenas agenda a execução da regra central.
     public SincronizacaoChamadosTask(AlertaService alertaService)
     {
         this.alertaService = alertaService;

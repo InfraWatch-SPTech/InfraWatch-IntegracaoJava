@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 
+// Encapsula a comunicação HTTP com o Jira, concentrando autenticação, serialização e consulta de issues.
 public class JiraController
 {
     private final String baseUrl;
@@ -34,6 +35,7 @@ public class JiraController
         this.objectMapper = new ObjectMapper();
     }
 
+    // Cria uma issue no Jira usando o payload no formato esperado pela API REST v3.
     public String createIssue(String projectKey, String summary, String descriptionText, String issueType) throws IOException, InterruptedException
     {
         // Monta o corpo da requisição usando os DTOs
@@ -69,6 +71,8 @@ public class JiraController
     }
 
 
+    // Consulta uma issue existente pedindo apenas o campo de status, porque a resolução é
+    // controlada pela própria aplicação quando a task identifica a transição.
     public String consultarChamado(String issueKey) throws IOException, InterruptedException
     {
         // Pede só o campo de status, porque a data de resolução passou a ser registrada pela própria

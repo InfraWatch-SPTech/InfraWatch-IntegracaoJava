@@ -16,14 +16,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+// Classe de bootstrap da aplicação, responsável por montar as dependências e agendar as rotinas.
 public class Main
 {
     private static final DateTimeFormatter FORMATO_LOG = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    // Padroniza a montagem das mensagens para manter o formato de log igual entre as rotinas.
     private static String montarLog(String nivel, String bloco, String mensagem) {
         return "[" + LocalDateTime.now().format(FORMATO_LOG) + "] [" + nivel + "] [" + bloco + "] " + mensagem;
     }
 
+    // Separa visualmente os blocos de inicialização para facilitar a leitura no console.
     private static void section(String bloco, String titulo) {
         System.out.println();
         System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
@@ -31,10 +34,13 @@ public class Main
         System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
     }
 
+    // Emite mensagens informativas durante a inicialização sem repetir a lógica de formatação.
     private static void info(String bloco, String mensagem) {
         System.out.println(montarLog("INFO", bloco, mensagem));
     }
 
+    // Prepara as dependências e agenda as duas rotinas principais da aplicação: leitura do S3 e
+    // sincronização dos chamados com o Jira.
     public static void main(String[] args) {
         section("BOOT", "Inicializando InfraWatch");
 
