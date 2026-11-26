@@ -20,36 +20,6 @@ public class AlertaDAO
         this.connection = dbConnectionProvider.getConnection();
     }
 
-    /*public List<Alerta> buscarTodos()
-    {
-        String sql = """
-            SELECT
-                a.id_alerta AS idAlerta,
-                a.jira_key AS jiraKey,
-                a.fkEquipamento,
-                a.fkComponente,
-                eq.fkEmpresa,
-                emp.nome AS empresa,
-                eq.nome AS equipamento,
-                c.nome AS componente,
-                a.tipo_alerta AS tipoAlerta,
-                a.valor_medido AS valorMedido,
-                a.limite_violado AS limiteViolado,
-                a.status_alerta AS statusAlerta,
-                a.criado_em AS criadoEm,
-                a.resolvido_em AS resolvidoEm,
-                emp.sla_resolucao AS slaResolucao
-            FROM alerta a
-            JOIN equipamento eq ON a.fkEquipamento = eq.idEquipamento
-            JOIN empresa emp ON eq.fkEmpresa = emp.idEmpresa
-            JOIN componente c ON a.fkComponente = c.idComponente
-        """;
-
-        List<Alerta> alertas = connection.query(sql, new BeanPropertyRowMapper<>(Alerta.class));
-
-        return alertas;
-    }*/
-
     public String buscarEquipamento(String id)
     {
         // Resolve o nome do equipamento a partir do identificador, garantindo que a mensagem enviada
@@ -90,6 +60,21 @@ public class AlertaDAO
         return connection.queryForList(sql, idEquipamento);
     }
 
+    public List<Map<String, Object>> buscarEquipamentosDaEmpresa(String nomeEmpresa)
+    {
+        // A tarefa do S3 precisa percorrer todos os equipamentos da empresa, então essa consulta
+        // devolve os ids e nomes associados ao mesmo dono.
+        String sql = """
+            SELECT eq.idEquipamento, eq.nome
+            FROM equipamento eq
+            JOIN empresa emp ON eq.fkEmpresa = emp.idEmpresa
+            WHERE emp.nome = ?
+            ORDER BY eq.idEquipamento
+        """;
+
+        return connection.queryForList(sql, nomeEmpresa);
+    }
+
     public void salvar(Alerta alerta)
     {
         // Persiste apenas os campos que fazem parte da tabela alerta, deixando o restante dos dados
@@ -101,8 +86,9 @@ public class AlertaDAO
                 fkComponente,
                 tipo_alerta,
                 valor_medido,
-                limite_violado)
-                VALUES (?, ?, ?, ?, ?, ?)
+                limite_violado,
+                arquivo_lido)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """;
 
         connection.update(
@@ -112,9 +98,51 @@ public class AlertaDAO
                 alerta.getFkComponente(),
                 alerta.getTipoAlerta(),
                 alerta.getValorMedido(),
-                alerta.getLimiteViolado()
+                alerta.getLimiteViolado(),
+                alerta.getArquivoLido()
         );
-
         // criado_em e status entra sozinho porque tem default
+    }
+
+    public List<Alerta> buscarAlertasNaoResolvidos()
+    {
+        // A sincronização precisa revisar tanto chamados ainda não concluídos quanto chamados que
+        // já estão concluídos, mas ficaram sem a data de resolução preenchida.
+        String sql = """
+            SELECT jira_key AS jiraKey, status_alerta AS statusAlerta, resolvido_em AS resolvidoEm
+            FROM alerta
+            WHERE status_alerta <> 'Concluído'
+               OR resolvido_em IS NULL
+        """;
+
+        return connection.query(sql, new BeanPropertyRowMapper<>(Alerta.class));
+    }
+
+    public void atualizarStatus(String jiraKey, String statusAlerta)
+    {
+        // Usa a jira_key para achar o alerta, já que ela é o vínculo entre o banco e o chamado no Jira.
+        String sql = "UPDATE alerta SET status_alerta = ? WHERE jira_key = ?";
+
+        connection.update(sql, statusAlerta, jiraKey);
+    }
+
+    public void atualizarStatusResolvido(String jiraKey, String statusAlerta, String resolvidoEm)
+    {
+        // Quando o chamado muda para resolvido, o próprio sistema registra a data da confirmação
+        // feita pela task, sem depender de campos opcionais vindos do Jira.
+        String sql = "UPDATE alerta SET status_alerta = ?, resolvido_em = ? WHERE jira_key = ?";
+
+        connection.update(sql, statusAlerta, resolvidoEm, jiraKey);
+    }
+
+    public boolean arquivoJaLido(String arquivoLido)
+    {
+        // Se já existe algum alerta gravado com esse arquivo, ele já foi lido e os chamados dele já
+        // foram abertos, então não precisa ser lido de novo.
+        String sql = "SELECT COUNT(*) FROM alerta WHERE arquivo_lido = ?";
+
+        Integer quantidade = connection.queryForObject(sql, Integer.class, arquivoLido);
+
+        return quantidade > 0;
     }
 }

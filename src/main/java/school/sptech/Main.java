@@ -3,98 +3,87 @@ package school.sptech;
 import io.github.cdimascio.dotenv.Dotenv;
 import school.sptech.config.S3Provider;
 import school.sptech.controller.JiraController;
-import school.sptech.model.Alerta;
 import school.sptech.dao.AlertaDAO;
-import school.sptech.model.DadosHardwareModelo;
 import school.sptech.service.AlertaService;
+import school.sptech.service.MonitorarArquivosS3Task;
 import school.sptech.service.S3Service;
+import school.sptech.service.SincronizacaoChamadosTask;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
-import software.amazon.awssdk.services.s3.model.S3Object;
 
-import java.util.List;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-public class Main {
+public class Main
+{
+    private static final DateTimeFormatter FORMATO_LOG = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public static void main(String[] args)
-    {
-        // Carrega as credenciais e configurações externas antes de iniciar qualquer integração,
-        // evitando espalhar valores sensíveis pelo código-fonte.
+    private static String montarLog(String nivel, String bloco, String mensagem) {
+        return "[" + LocalDateTime.now().format(FORMATO_LOG) + "] [" + nivel + "] [" + bloco + "] " + mensagem;
+    }
+
+    private static void section(String bloco, String titulo) {
+        System.out.println();
+        System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
+        System.out.println(montarLog("BLOCO", bloco, titulo));
+        System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
+    }
+
+    private static void info(String bloco, String mensagem) {
+        System.out.println(montarLog("INFO", bloco, mensagem));
+    }
+
+    public static void main(String[] args) {
+        section("BOOT", "Inicializando InfraWatch");
+
+        // As configurações externas precisam estar disponíveis antes de criar os clientes e as
+        // tarefas, porque o restante do fluxo depende das credenciais e do endereço do Jira.
         Dotenv dotenv = Dotenv.load();
 
-        // Cria o cliente do S3 com as credenciais vindas do ambiente, porque o fluxo começa
-        // lendo o último JSON gerado no bucket para então descobrir se há alerta a processar.
+        // O bucket, a empresa e os ids dos equipamentos seguem a organização já usada no projeto:
+        // o S3 guarda os JSONs separados por id de equipamento dentro da pasta da empresa.
+        String bucketName = "gold-api-java";
+        String empresa = "NovaTech Solucoes";
+
         S3Client s3Client = new S3Provider().criarClienteS3();
         S3Service readerService = new S3Service(s3Client);
+        JiraController jira = new JiraController(dotenv.get("JIRA_BASE_URL"), dotenv.get("JIRA_EMAIL"), dotenv.get("JIRA_API_TOKEN"));
+        AlertaService alertaService = new AlertaService(jira);
+        AlertaDAO alertaDAO = new AlertaDAO();
 
-        // Busca o arquivo mais recente do equipamento monitorado. Esse objeto concentra os
-        // valores usados na comparação com os limites cadastrados no banco.
-        DadosHardwareModelo dados = readerService.lerUltimoArquivoJson("gold-api-java", "NovaTech Solucoes", "8");
+        // Um pool com duas threads permite executar a varredura do S3 e a sincronização de status
+        // ao mesmo tempo, sem misturar as rotinas em uma única fila de execução.
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
-        if (dados!= null)
-        {
-            // Só depois de obter o JSON válido o sistema instancia a integração com o Jira e
-            // dispara a regra de negócio responsável por criar e persistir os chamados.
-            JiraController jira = new JiraController(dotenv.get("JIRA_BASE_URL"), dotenv.get("JIRA_EMAIL"), dotenv.get("JIRA_API_TOKEN"));
-            AlertaService alertaService = new AlertaService(jira);
-            alertaService.verificarEEnviarAlertas(dados);
-        }
+        section("BOOT", "Agendando a varredura do S3");
 
-        // Inserindo um novo filme a partir de um objeto
+        // Task que percorre a empresa inteira, lê o último JSON de cada equipamento e dispara os
+        // alertas quando existirem métricas acima do limite.
+        MonitorarArquivosS3Task tarefaS3 = new MonitorarArquivosS3Task(alertaDAO, readerService, alertaService, bucketName, empresa);
 
-        /*Filme novoFilme = new Filme(null, "Vingadores: Ultimato", 2019, "Ação", "Anthony Russo, Joe Russo");
+        section("BOOT", "Agendando a sincronização com o Jira");
 
-        connection.update("INSERT INTO filme (nome, ano, genero, diretor) VALUES (?, ?, ?, ?)",
-                novoFilme.getNome(), novoFilme.getAno(), novoFilme.getGenero(), novoFilme.getDiretor());
+        // Task que verifica periodicamente se os chamados criados no Jira tiveram mudança de status
+        // e atualiza o banco para manter o histórico sincronizado.
+        SincronizacaoChamadosTask tarefaSincronizacao = new SincronizacaoChamadosTask(alertaService);
 
-        System.out.println("\nFilmes no banco de dados após inserção de novo filme:");
+        // A primeira execução acontece imediatamente para não depender de um novo arquivo aparecer
+        // antes de iniciar o processamento.
+        scheduler.scheduleAtFixedRate(tarefaS3, 0, 20, TimeUnit.SECONDS);
 
-        filmesDoBanco = connection.query("SELECT * FROM filme", new BeanPropertyRowMapper<>(Filme.class));
+        // Em paralelo à leitura do S3, a aplicação consulta o Jira para manter os status dos
+        // chamados atualizados no banco.
+        scheduler.scheduleAtFixedRate(tarefaSincronizacao, 0, 20, TimeUnit.SECONDS);
 
-        for (Filme filme : filmesDoBanco) {
-            System.out.println(filme);
-        }
+        // Garante encerramento ordenado do agendador quando a aplicação for finalizada manualmente.
+        Runtime.getRuntime().addShutdownHook(new Thread(scheduler::shutdown));
 
-        // Atualizando um filme
+        info("BOOT", "Aplicação em execução com tarefas agendadas ativas.");
 
-        connection.update("UPDATE filme SET nome = ?, ano = ?, genero = ?, diretor = ? WHERE id = ?",
-                "Shrek", 2001, "Animação", "Andrew Adamson, Vicky Jenson", 5);
-
-        System.out.println("\nFilmes no banco de dados após atualização de filme:");
-
-        filmesDoBanco = connection.query("SELECT * FROM filme", new BeanPropertyRowMapper<>(Filme.class));
-
-        for (Filme filme : filmesDoBanco) {
-            System.out.println(filme);
-        }
-
-        // Deletando um filme
-
-        connection.update("DELETE FROM filme WHERE id = ?", 5);
-
-        System.out.println("\nFilmes no banco de dados após exclusão de filme:");
-
-        filmesDoBanco = connection.query("SELECT * FROM filme", new BeanPropertyRowMapper<>(Filme.class));
-
-        for (Filme filme : filmesDoBanco) {
-            System.out.println(filme);
-        }
-
-        // Busca personalizada
-
-        System.out.println("\nFilmes de drama no banco de dados:");
-
-        filmesDoBanco = connection.query("SELECT * FROM filme WHERE genero = ?", new BeanPropertyRowMapper<>(Filme.class), "Drama");
-
-        for (Filme filme : filmesDoBanco) {
-            System.out.println(filme);
-        }
-
-        // Buscar um filme pelo ID
-
-        Filme filmeEncontrado = connection.queryForObject("SELECT * FROM filme WHERE id = ?", new BeanPropertyRowMapper<>(Filme.class), 1);
-        System.out.println("\nFilme com ID 1: " + filmeEncontrado);*/
-
-        // Obs: se sua query retornar nenhum ou mais de um item, ao executar, uma exceção será lançada.
+        // Agenda a sincronização dos chamados: a cada 20 segundos a tarefa consulta o Jira e atualiza
+        // no banco o status dos chamados que ficaram desatualizados.
+        // O 0 é o tempo de espera antes da primeira execução, e o 20 é o intervalo em segundos.
     }
 }

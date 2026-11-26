@@ -17,6 +17,9 @@ public class DadosHardwareModelo
     private String empresa;
     private String equipamento;
 
+    // Key do arquivo do S3 de onde esses dados foram lidos. Não vem no JSON, é preenchida pelo S3Service
+    private String arquivoOrigem;
+
     @JsonProperty("cpu_media")
     @JsonAlias({"Processador_media", "CPU_media", "cpu_media", "processador_media", "Uso_do_processador_media"})
     private Double cpuMedia;
@@ -84,6 +87,14 @@ public class DadosHardwareModelo
 
     public void setEquipamento(String equipamento) {
         this.equipamento = equipamento;
+    }
+
+    public String getArquivoOrigem() {
+        return arquivoOrigem;
+    }
+
+    public void setArquivoOrigem(String arquivoOrigem) {
+        this.arquivoOrigem = arquivoOrigem;
     }
 
     public Double getCpuMedia() {

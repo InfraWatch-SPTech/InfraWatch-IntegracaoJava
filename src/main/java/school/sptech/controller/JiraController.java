@@ -34,8 +34,8 @@ public class JiraController
         this.objectMapper = new ObjectMapper();
     }
 
-    public String createIssue(String projectKey, String summary, String descriptionText, String issueType)
-            throws IOException, InterruptedException {
+    public String createIssue(String projectKey, String summary, String descriptionText, String issueType) throws IOException, InterruptedException
+    {
         // Monta o corpo da requisição usando os DTOs
         ProjectDto project = new ProjectDto(projectKey);
         IssueTypeDto type = new IssueTypeDto(issueType);
@@ -62,6 +62,35 @@ public class JiraController
         int status = response.statusCode();
 
         if (status >= 200 && status < 300) {
+            return response.body();
+        }
+
+        throw new RuntimeException("Jira request failed: " + status + " - " + response.body());
+    }
+
+
+    public String consultarChamado(String issueKey) throws IOException, InterruptedException
+    {
+        // Pede só o campo de status, porque a data de resolução passou a ser registrada pela própria
+        // aplicação no momento em que ela detecta a mudança para resolvido.
+        String url = baseUrl + "/rest/api/3/issue/" + issueKey + "?fields=status";
+
+        // Cria a requisição GET para consultar a issue que já foi criada
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(60))
+                .header("Authorization", authHeader)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        // Envia a requisição
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        int status = response.statusCode();
+
+        if (status >= 200 && status < 300)
+        {
             return response.body();
         }
 

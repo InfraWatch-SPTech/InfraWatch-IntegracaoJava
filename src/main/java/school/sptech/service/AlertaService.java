@@ -9,14 +9,41 @@ import school.sptech.dao.AlertaDAO;
 import school.sptech.model.Alerta;
 import school.sptech.model.DadosHardwareModelo;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 public class AlertaService
 {
+    private static final DateTimeFormatter FORMATO_LOG = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final AlertaDAO alertaDAO;
     private final JiraController jira;
+
+    private static String montarLog(String nivel, String bloco, String mensagem) {
+        return "[" + LocalDateTime.now().format(FORMATO_LOG) + "] [" + nivel + "] [" + bloco + "] " + mensagem;
+    }
+
+    private static void info(String bloco, String mensagem) {
+        System.out.println(montarLog("INFO", bloco, mensagem));
+    }
+
+    private static void warn(String bloco, String mensagem) {
+        System.out.println(montarLog("WARN", bloco, mensagem));
+    }
+
+    private static void error(String bloco, String mensagem) {
+        System.err.println(montarLog("ERRO", bloco, mensagem));
+    }
+
+    private static void section(String bloco, String titulo) {
+        System.out.println();
+        System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
+        System.out.println(montarLog("BLOCO", bloco, titulo));
+        System.out.println(montarLog("BLOCO", bloco, "--------------------------------------------------"));
+    }
 
     // O serviço concentra a orquestração do fluxo: identifica o equipamento, lê os parâmetros
     // ativos, compara as métricas e decide se um chamado precisa ser gerado.
@@ -33,7 +60,7 @@ public class AlertaService
     {
         if (codigoEquipamento == null || codigoEquipamento.trim().isEmpty())
         {
-            System.err.println("Código ou ID do equipamento veio nulo/vazio do S3.");
+            error("ALERTA", "Código ou ID do equipamento veio nulo/vazio do S3.");
             return null;
         }
 
@@ -63,7 +90,7 @@ public class AlertaService
 
         catch (Exception e)
         {
-            System.err.println("Erro SQL ao buscar equipamento '" + codigoEquipamento + "' no MySQL: " + e.getMessage());
+            error("ALERTA", "Erro SQL ao buscar equipamento '" + codigoEquipamento + "' no MySQL: " + e.getMessage());
             return null;
         }
     }
@@ -75,19 +102,21 @@ public class AlertaService
     {
         if (dados == null)
         {
-            System.err.println("Objeto DadosHardwareModelo está nulo.");
+            error("ALERTA", "Objeto DadosHardwareModelo está nulo.");
             return;
         }
+
+        section("ALERTA", "Validando leituras do equipamento " + dados.getEquipamento());
 
         Integer idEquipamento = buscarIdEquipamento(dados.getEquipamento());
 
         if (idEquipamento == null)
         {
-            System.err.println("Processamento interrompido: equipamento não encontrado no banco MySQL.");
+            error("ALERTA", "Processamento interrompido: equipamento não encontrado no banco MySQL.");
             return;
         }
 
-        System.out.println("Equipamento encontrado no MySQL com ID: " + idEquipamento);
+        info("ALERTA", "Equipamento encontrado no MySQL com ID: " + idEquipamento);
 
         // Busca no banco todos os componentes e limites ativos para este equipamento
         /*String sql = """
@@ -101,7 +130,7 @@ public class AlertaService
         List<Map<String, Object>> componentesMonitorados = alertaDAO.buscarParametrosAtivos(idEquipamento);
 
         if (componentesMonitorados.isEmpty()) {
-            System.out.println("Nenhum parâmetro de alerta ativo cadastrado para o equipamento ID: " + idEquipamento);
+            warn("ALERTA", "Nenhum parâmetro de alerta ativo cadastrado para o equipamento ID: " + idEquipamento);
             return;
         }
 
@@ -125,7 +154,7 @@ public class AlertaService
 
             else
             {
-                System.out.println("Métrica não encontrada no JSON para o componente: " + nomeComp);
+                warn("ALERTA", "Métrica não encontrada no JSON para o componente: " + nomeComp);
             }
         }
     }
@@ -195,7 +224,7 @@ public class AlertaService
 
             else if (valorMedio >= limiteAtencao)
             {
-                tipoAlerta = "ALERTA";
+                tipoAlerta = "ATENCAO";
                 limiteUsado = limiteAtencao;
 
                 /*System.out.println("Disparando Alerta de Atenção no Jira para " + nomeComponente);
@@ -206,7 +235,7 @@ public class AlertaService
 
             else
             {
-                System.out.println("Componente " + nomeComponente + " (Média: " + valorMedio + "%) dentro dos limites.");
+                info("ALERTA", "Componente " + nomeComponente + " (Média: " + valorMedio + "%) dentro dos limites.");
                 return; // impedir envio quando nao tiver alerta
             }
 
@@ -232,7 +261,7 @@ public class AlertaService
                     limiteUsado
             );
 
-            System.out.println("Disparando alerta no Jira para " + nomeComponente);
+            section("ALERTA", "Criando chamado no Jira para o componente " + nomeComponente);
 
             String response = jira.createIssue("KAN", summary, descriptionText, "Task");
 
@@ -252,20 +281,117 @@ public class AlertaService
             alerta.setValorMedido(valorMedio);
             alerta.setLimiteViolado(limiteUsado);
 
+            // Guarda o arquivo do S3 que gerou o alerta para que ele não seja processado de novo
+            alerta.setArquivoLido(dados.getArquivoOrigem());
+
             alertaDAO.salvar(alerta);
 
-            System.out.println("Issue criada no Jira: " + response);
+            info("ALERTA", "Issue criada no Jira: " + response);
         }
 
         catch (IOException | InterruptedException e)
         {
-            System.err.println("Erro ao comunicar com a API do Jira: " + e.getMessage());
+            error("ALERTA", "Erro ao comunicar com a API do Jira: " + e.getMessage());
             e.printStackTrace();
         }
 
         catch (Exception e)
         {
-            System.err.println("Erro ao processar alerta para " + nomeComponente + ": " + e.getMessage());
+            error("ALERTA", "Erro ao processar alerta para " + nomeComponente + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * Compara o status dos chamados no banco com o status no Jira e atualiza o banco quando estiver desatualizado.
+     */
+    public void sincronizarStatusChamados()
+    {
+        section("SINCRONIZACAO", "Iniciando a sincronização dos chamados com o Jira");
+
+        // Busca no banco apenas os alertas que ainda não estão resolvidos
+        List<Alerta> alertasEmAberto = alertaDAO.buscarAlertasNaoResolvidos();
+
+        if (alertasEmAberto.isEmpty())
+        {
+            info("SINCRONIZACAO", "Nenhum chamado pendente para sincronizar.");
+            return;
+        }
+
+        // Cada alerta é consultado individualmente no Jira usando a jira_key salva no banco.
+        for (Alerta alerta : alertasEmAberto)
+        {
+            // O try fica dentro do for para que um chamado com erro não impeça a verificação dos outros
+            // e não derrube a tarefa agendada.
+            try
+            {
+                String response = jira.consultarChamado(alerta.getJiraKey());
+
+                JsonNode fields = new ObjectMapper().readTree(response).path("fields");
+
+                // Usa a categoria do status (new, indeterminate, done) e não o nome, porque o nome muda
+                // conforme o idioma e a configuração do quadro no Jira.
+                String categoria = fields.path("status").path("statusCategory").path("key").asText();
+                String statusJira = converterStatusJira(categoria);
+
+                // Se o status do banco já é igual ao do Jira, a única exceção é o caso do chamado
+                // já estar concluído sem ter a data preenchida; aí a própria task completa a pendência.
+                if (statusJira.equals(alerta.getStatusAlerta()))
+                {
+                    if (statusJira.equals("Concluído") && (alerta.getResolvidoEm() == null || alerta.getResolvidoEm().trim().isEmpty()))
+                    {
+                        String resolvidoEm = java.time.LocalDateTime.now().toString().substring(0, 19).replace("T", " ");
+                        alertaDAO.atualizarStatusResolvido(alerta.getJiraKey(), statusJira, resolvidoEm);
+                        info("SINCRONIZACAO", "Chamado " + alerta.getJiraKey() + " já estava concluído, então a data de resolução foi preenchida agora.");
+                    }
+
+                    info("SINCRONIZACAO", "Chamado " + alerta.getJiraKey() + " já está atualizado (" + statusJira + ").");
+                    continue;
+                }
+
+                if (statusJira.equalsIgnoreCase("CONCLUÍDO"))
+                {
+                    // Quando a task identifica a transição para resolvido, a própria aplicação registra
+                    // o instante da confirmação, evitando depender de campos opcionais do Jira.
+                    String resolvidoEm = java.time.LocalDateTime.now().toString().substring(0, 19).replace("T", " ");
+
+                    alertaDAO.atualizarStatusResolvido(alerta.getJiraKey(), statusJira, resolvidoEm);
+                }
+
+                else
+                {
+                    alertaDAO.atualizarStatus(alerta.getJiraKey(), statusJira);
+                }
+
+                info("SINCRONIZACAO", "Chamado " + alerta.getJiraKey() + " atualizado de " + alerta.getStatusAlerta() + " para " + statusJira);
+            }
+
+            catch (IOException | InterruptedException e)
+            {
+                error("SINCRONIZACAO", "Erro ao comunicar com a API do Jira para o chamado " + alerta.getJiraKey() + ": " + e.getMessage());
+            }
+
+            catch (Exception e)
+            {
+                error("SINCRONIZACAO", "Erro ao sincronizar o chamado " + alerta.getJiraKey() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+             * Converte a categoria de status do Jira para o status usado na tabela alerta
+     */
+    private String converterStatusJira(String categoriaJira)
+    {
+        if (categoriaJira.equals("done"))
+        {
+            return "Concluído";
+        }
+
+        else if (categoriaJira.equals("indeterminate"))
+        {
+            return "Em andamento";
+        }
+
+        return "A fazer";
     }
 }

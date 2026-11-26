@@ -17,11 +17,13 @@ public class Alerta
     private String statusAlerta;
     private String resolvidoEm;
 
+    // Caminho (key) do arquivo do S3 que originou o alerta, usado para não processar o mesmo arquivo duas vezes.
+    private String arquivoLido;
+
     public Alerta() {
     }
 
-    // Construtor completo para cenários em que o alerta já chega totalmente preenchido.
-    public Alerta(Integer fkEquipamento, Integer fkComponente, String jiraKey, String tipoAlerta, Double valorMedido, Double limiteViolado, String statusAlerta, String resolvidoEm) {
+    public Alerta(Integer fkEquipamento, Integer fkComponente, String jiraKey, String tipoAlerta, Double valorMedido, Double limiteViolado, String statusAlerta, String resolvidoEm, String arquivoLido) {
         this.fkEquipamento = fkEquipamento;
         this.fkComponente = fkComponente;
         this.jiraKey = jiraKey;
@@ -30,6 +32,7 @@ public class Alerta
         this.limiteViolado = limiteViolado;
         this.statusAlerta = statusAlerta;
         this.resolvidoEm = resolvidoEm;
+        this.arquivoLido = arquivoLido;
     }
 
     public Integer getFkEquipamento() {
@@ -96,6 +99,14 @@ public class Alerta
         this.resolvidoEm = resolvidoEm;
     }
 
+    public String getArquivoLido() {
+        return arquivoLido;
+    }
+
+    public void setArquivoLido(String arquivoLido) {
+        this.arquivoLido = arquivoLido;
+    }
+
     @Override
     public String toString() {
         return "Alerta{" +
@@ -107,6 +118,7 @@ public class Alerta
                 ", limiteViolado=" + limiteViolado +
                 ", statusAlerta='" + statusAlerta + '\'' +
                 ", resolvidoEm='" + resolvidoEm + '\'' +
+                ", arquivoLido='" + arquivoLido + '\'' +
                 '}';
     }
 }
