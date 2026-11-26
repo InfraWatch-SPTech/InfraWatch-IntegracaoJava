@@ -1,6 +1,6 @@
 package school.sptech.dto;
 
-// DTO: representa como objeto Java o JSON { "fields": { ... } } enviado ao criar uma issue
+// DTO raiz da requisição do Jira, encapsulando todos os campos que vão dentro de "fields".
 public class IssueRequestDto {
 
     private IssueFieldsDto fields;

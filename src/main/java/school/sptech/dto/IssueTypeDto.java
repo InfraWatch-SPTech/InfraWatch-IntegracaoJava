@@ -1,6 +1,6 @@
 package school.sptech.dto;
 
-// DTO: representa como objeto Java o JSON { "name": "..." } do tipo da issue (Task, Bug, Story...)
+// DTO que informa ao Jira qual tipo de issue deve ser criada no projeto.
 public class IssueTypeDto {
 
     private String name;

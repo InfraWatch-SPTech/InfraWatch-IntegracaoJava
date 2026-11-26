@@ -18,6 +18,8 @@ public class AlertaService
     private final AlertaDAO alertaDAO;
     private final JiraController jira;
 
+    // O serviço concentra a orquestração do fluxo: identifica o equipamento, lê os parâmetros
+    // ativos, compara as métricas e decide se um chamado precisa ser gerado.
     public AlertaService(JiraController jira)
     {
         this.alertaDAO = new AlertaDAO();
@@ -37,6 +39,8 @@ public class AlertaService
 
         try
         {
+            // Primeiro tenta interpretar o código como identificador numérico, porque o JSON pode
+            // carregar apenas o número do equipamento em vez do nome completo.
             // 1. Tenta buscar pelo ID numérico diretamente (ex: "1" -> 1)
             try
             {
@@ -48,6 +52,8 @@ public class AlertaService
 
             catch (NumberFormatException e)
             {
+                // Se não for número, o fluxo cai para a busca pelo nome, cobrindo a forma textual
+                // que também pode chegar no arquivo do S3.
                 // 2. Se não for número, busca pelo campo 'nome' na tabela 'equipamento'
                 //String sql = "SELECT idEquipamento FROM equipamento WHERE nome = ?;";
                 //return template.queryForObject(sql, Integer.class, codigoEquipamento.trim());
@@ -99,7 +105,7 @@ public class AlertaService
             return;
         }
 
-        // Percorre apenas os componentes cadastrados para este equipamento
+        // Cada linha retornada representa um componente monitorado com seus limites ativos.
         for (Map<String, Object> comp : componentesMonitorados)
         {
             String nomeComp = (String) comp.get("nome_componente");
@@ -108,7 +114,8 @@ public class AlertaService
             Double limiteCritico = ((Number) comp.get("limite_critico")).doubleValue();
             Integer fkComponente = ((Number) comp.get("fkComponente")).intValue();
 
-            // Identifica qual valor do JSON corresponde a este componente
+            // A métrica correta é escolhida a partir do tipo/nome do componente, pois o JSON pode
+            // variar a nomenclatura entre "Processador", "CPU", "Memoria RAM" e outros sinônimos.
             Double valorMedio = extrairValorMetrica(dados, tipoComp, nomeComp);
 
             if (valorMedio != null)
@@ -128,6 +135,8 @@ public class AlertaService
      */
     private Double extrairValorMetrica(DadosHardwareModelo dados, String tipoComp, String nomeComp)
     {
+        // O identificador é normalizado em maiúsculas para simplificar a comparação com os nomes
+        // cadastrados no banco e reduzir a sensibilidade a variações de escrita.
         String identificador = (tipoComp + " " + nomeComp).toUpperCase();
 
         if (identificador.contains("CPU") || identificador.contains("PROCESSADOR"))
@@ -171,6 +180,8 @@ public class AlertaService
             /*String mensagemCritica = String.format("ALERTA CRÍTICO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);
             String mensagemAtencao = String.format("ALERTA DE ATENÇÃO: O componente %s alcançou %.2f%%!", nomeComponente, valorMedio);*/
 
+            // A severidade crítica é verificada primeiro para garantir prioridade quando o valor
+            // ultrapassa mais de um limite ao mesmo tempo.
             if (valorMedio >= limiteCritico)
             {
                 tipoAlerta = "CRITICO";
@@ -199,8 +210,12 @@ public class AlertaService
                 return; // impedir envio quando nao tiver alerta
             }
 
+            // O nome legível do equipamento vem do banco para que a issue seja compreensível sem expor
+            // o identificador bruto do JSON.
             String equipamentoNome = alertaDAO.buscarEquipamento(dados.getEquipamento());
 
+            // O summary é o título curto da issue; a descrição carrega o contexto completo para leitura
+            // humana e para facilitar a rastreabilidade do incidente.
             String summary = String.format("[%s] %s em %.1f%% - %s",
                     tipoAlerta,
                     nomeComponente,
@@ -221,10 +236,13 @@ public class AlertaService
 
             String response = jira.createIssue("KAN", summary, descriptionText, "Task");
 
-            // extrai a key
+            // A resposta da API do Jira devolve a key da issue criada, que é o vínculo persistido no
+            // banco para manter a correlação entre chamado e monitoramento.
             JsonNode node = new ObjectMapper().readTree(response);
             String jiraKey = node.get("key").asText();
 
+            // O objeto persistido no banco guarda apenas o necessário para reconstruir o histórico do
+            // alerta e relacioná-lo ao Jira e ao equipamento/componente de origem.
             Alerta alerta = new Alerta();
 
             alerta.setJiraKey(jiraKey);
@@ -233,7 +251,6 @@ public class AlertaService
             alerta.setTipoAlerta(tipoAlerta);
             alerta.setValorMedido(valorMedio);
             alerta.setLimiteViolado(limiteUsado);
-            alerta.setStatusAlerta("A fazer");
 
             alertaDAO.salvar(alerta);
 

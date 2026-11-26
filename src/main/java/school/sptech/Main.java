@@ -18,14 +18,23 @@ public class Main {
 
     public static void main(String[] args)
     {
+        // Carrega as credenciais e configurações externas antes de iniciar qualquer integração,
+        // evitando espalhar valores sensíveis pelo código-fonte.
         Dotenv dotenv = Dotenv.load();
+
+        // Cria o cliente do S3 com as credenciais vindas do ambiente, porque o fluxo começa
+        // lendo o último JSON gerado no bucket para então descobrir se há alerta a processar.
         S3Client s3Client = new S3Provider().criarClienteS3();
         S3Service readerService = new S3Service(s3Client);
 
+        // Busca o arquivo mais recente do equipamento monitorado. Esse objeto concentra os
+        // valores usados na comparação com os limites cadastrados no banco.
         DadosHardwareModelo dados = readerService.lerUltimoArquivoJson("gold-api-java", "NovaTech Solucoes", "8");
 
         if (dados!= null)
         {
+            // Só depois de obter o JSON válido o sistema instancia a integração com o Jira e
+            // dispara a regra de negócio responsável por criar e persistir os chamados.
             JiraController jira = new JiraController(dotenv.get("JIRA_BASE_URL"), dotenv.get("JIRA_EMAIL"), dotenv.get("JIRA_API_TOKEN"));
             AlertaService alertaService = new AlertaService(jira);
             alertaService.verificarEEnviarAlertas(dados);

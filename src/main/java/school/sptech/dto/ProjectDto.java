@@ -1,6 +1,6 @@
 package school.sptech.dto;
 
-// DTO: representa como objeto Java o JSON { "key": "..." } do projeto do Jira
+// DTO pequeno para serializar o projeto do Jira na estrutura esperada pela API.
 public class ProjectDto {
 
     private String key;

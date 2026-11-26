@@ -1,57 +1,35 @@
 package school.sptech.model;
 
+// Modelo enxuto usado para persistir e transportar o alerta já consolidado entre Jira e banco.
 public class Alerta
 {
-    private Integer idAlerta;
-
+    // Chaves estrangeiras que ligam o alerta ao equipamento e ao componente que o originaram.
     private Integer fkEquipamento;
     private Integer fkComponente;
-    private Integer fkEmpresa;
 
+    // Identificador retornado pelo Jira para permitir rastreamento entre os dois sistemas.
     private String jiraKey;
 
-    // vindo dos joins
-    private String empresa;
-    private String equipamento;
-    private String componente;
-
+    // Classificação do alerta e números usados para auditoria e exibição no histórico.
     private String tipoAlerta;
     private Double valorMedido;
     private Double limiteViolado;
     private String statusAlerta;
-
-    private String criadoEm;
     private String resolvidoEm;
-
-    private Integer slaResolucao; // entidade empresa
 
     public Alerta() {
     }
 
-    public Alerta(Integer idAlerta, Integer fkEquipamento, Integer fkComponente, Integer fkEmpresa, String jiraKey, String empresa, String equipamento, String componente, String tipoAlerta, Double valorMedido, Double limiteViolado, String statusAlerta, String criadoEm, String resolvidoEm, Integer slaResolucao) {
-        this.idAlerta = idAlerta;
+    // Construtor completo para cenários em que o alerta já chega totalmente preenchido.
+    public Alerta(Integer fkEquipamento, Integer fkComponente, String jiraKey, String tipoAlerta, Double valorMedido, Double limiteViolado, String statusAlerta, String resolvidoEm) {
         this.fkEquipamento = fkEquipamento;
         this.fkComponente = fkComponente;
-        this.fkEmpresa = fkEmpresa;
         this.jiraKey = jiraKey;
-        this.empresa = empresa;
-        this.equipamento = equipamento;
-        this.componente = componente;
         this.tipoAlerta = tipoAlerta;
         this.valorMedido = valorMedido;
         this.limiteViolado = limiteViolado;
         this.statusAlerta = statusAlerta;
-        this.criadoEm = criadoEm;
         this.resolvidoEm = resolvidoEm;
-        this.slaResolucao = slaResolucao;
-    }
-
-    public Integer getIdAlerta() {
-        return idAlerta;
-    }
-
-    public void setIdAlerta(Integer idAlerta) {
-        this.idAlerta = idAlerta;
     }
 
     public Integer getFkEquipamento() {
@@ -70,44 +48,12 @@ public class Alerta
         this.fkComponente = fkComponente;
     }
 
-    public Integer getFkEmpresa() {
-        return fkEmpresa;
-    }
-
-    public void setFkEmpresa(Integer fkEmpresa) {
-        this.fkEmpresa = fkEmpresa;
-    }
-
     public String getJiraKey() {
         return jiraKey;
     }
 
     public void setJiraKey(String jiraKey) {
         this.jiraKey = jiraKey;
-    }
-
-    public String getEmpresa() {
-        return empresa;
-    }
-
-    public void setEmpresa(String empresa) {
-        this.empresa = empresa;
-    }
-
-    public String getEquipamento() {
-        return equipamento;
-    }
-
-    public void setEquipamento(String equipamento) {
-        this.equipamento = equipamento;
-    }
-
-    public String getComponente() {
-        return componente;
-    }
-
-    public void setComponente(String componente) {
-        this.componente = componente;
     }
 
     public String getTipoAlerta() {
@@ -142,14 +88,6 @@ public class Alerta
         this.statusAlerta = statusAlerta;
     }
 
-    public String getCriadoEm() {
-        return criadoEm;
-    }
-
-    public void setCriadoEm(String criadoEm) {
-        this.criadoEm = criadoEm;
-    }
-
     public String getResolvidoEm() {
         return resolvidoEm;
     }
@@ -158,32 +96,17 @@ public class Alerta
         this.resolvidoEm = resolvidoEm;
     }
 
-    public Integer getSlaResolucao() {
-        return slaResolucao;
-    }
-
-    public void setSlaResolucao(Integer slaResolucao) {
-        this.slaResolucao = slaResolucao;
-    }
-
     @Override
     public String toString() {
         return "Alerta{" +
-                "idAlerta=" + idAlerta +
-                ", fkEquipamento=" + fkEquipamento +
+                "fkEquipamento=" + fkEquipamento +
                 ", fkComponente=" + fkComponente +
-                ", fkEmpresa=" + fkEmpresa +
                 ", jiraKey='" + jiraKey + '\'' +
-                ", empresa='" + empresa + '\'' +
-                ", equipamento='" + equipamento + '\'' +
-                ", componente='" + componente + '\'' +
                 ", tipoAlerta='" + tipoAlerta + '\'' +
                 ", valorMedido=" + valorMedido +
                 ", limiteViolado=" + limiteViolado +
                 ", statusAlerta='" + statusAlerta + '\'' +
-                ", criadoEm='" + criadoEm + '\'' +
                 ", resolvidoEm='" + resolvidoEm + '\'' +
-                ", slaResolucao=" + slaResolucao +
                 '}';
     }
 }

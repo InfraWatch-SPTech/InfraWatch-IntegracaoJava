@@ -2,7 +2,7 @@ package school.sptech.dto;
 
 import jdk.jfr.Description;
 
-// DTO: representa como objeto Java o JSON { "project": {...}, "summary": "...", "issuetype": {...} }
+// DTO que modela os campos reais enviados para o Jira na criação da issue.
 public class IssueFieldsDto {
 
     private ProjectDto project;

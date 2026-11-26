@@ -19,6 +19,8 @@ public class JiraController
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
+    // Centraliza a integração HTTP com o Jira, mantendo autenticação, serialização e envio de
+    // payload em um único ponto reutilizável pelo serviço de alerta.
     public JiraController(String baseUrl, String email, String apiToken) {
         this.baseUrl = baseUrl;
 

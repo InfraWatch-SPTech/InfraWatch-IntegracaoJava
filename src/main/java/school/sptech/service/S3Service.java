@@ -10,7 +10,7 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.util.Comparator;
 import java.util.Optional;
 
-// localiza e lê o JSON do bucket
+// Localiza o arquivo JSON mais recente no bucket e converte o conteúdo para o modelo de hardware.
 public class S3Service
 {
     private final S3Client s3Client;
@@ -24,6 +24,8 @@ public class S3Service
         this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
+    // Navega até o prefixo do equipamento, escolhe o JSON mais recente e o transforma em dados
+    // tipados para que o restante do fluxo possa trabalhar com valores já estruturados.
     public DadosHardwareModelo lerUltimoArquivoJson(String bucketName, String empresa, String equipamento) {
         String prefixo = String.format("gold/%s/%s/", empresa, equipamento);
 

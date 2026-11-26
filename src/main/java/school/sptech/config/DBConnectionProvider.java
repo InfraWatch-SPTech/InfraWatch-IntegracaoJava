@@ -7,7 +7,7 @@ import javax.sql.DataSource;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
-// Fornece o acesso ao banco de dados
+// Concentra a configuração do pool de conexões e entrega um JdbcTemplate pronto para uso.
 public class DBConnectionProvider {
 
     private final DataSource dataSource; // guarda a referência ao pool criado
@@ -27,8 +27,7 @@ public class DBConnectionProvider {
         this.dataSource = basicDataSource;
     }
 
-    // Cria e retorna um JdbcTemplate para executar consultas SQL
-    // utiliza esse DataSource para executar consultas SQL
+    // Expõe o acesso ao banco por meio do JdbcTemplate, que é o ponto de entrada usado pelos DAO.
     public JdbcTemplate getConnection() {
         return new JdbcTemplate(dataSource);
     }

@@ -5,11 +5,13 @@ import software.amazon.awssdk.auth.credentials.*;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
-// cria o cliente AWS
+// Responsável por centralizar a criação do cliente AWS S3 e a leitura do nome do bucket.
 public class S3Provider
 {
     private final Dotenv dotenv = Dotenv.load();
 
+    // Monta o cliente com credenciais temporárias vindas do .env, mantendo a configuração de
+    // infraestrutura isolada da leitura de arquivos e das regras de negócio.
     public S3Client criarClienteS3()
     {
         String accessKey = dotenv.get("AWS_ACCESS_KEY_ID");

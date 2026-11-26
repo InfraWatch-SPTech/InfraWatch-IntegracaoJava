@@ -8,22 +8,11 @@ import java.util.List;
 public class AlertaController
 {
     private final AlertaDAO alertaDAO;
-    //private final JiraController jiraController;
 
-    public AlertaController() {
-        this.alertaDAO = new AlertaDAO();
-        //this.jiraController = new JiraController();
-    }
-
-    public void processarAlertas()
+    public AlertaController()
     {
-        List<Alerta> alertas = alertaDAO.buscarTodos();
-
-        for (Alerta alerta : alertas) {
-            System.out.println(alerta);
-
-            // Regra futura:
-            // se o alerta atender uma condição, cria issue no Jira
-        }
+        // Mantém o acesso ao DAO encapsulado no controller, preservando o padrão usado pelo projeto
+        // mesmo que esta classe ainda esteja como ponto de expansão para fluxos futuros.
+        this.alertaDAO = new AlertaDAO();
     }
 }

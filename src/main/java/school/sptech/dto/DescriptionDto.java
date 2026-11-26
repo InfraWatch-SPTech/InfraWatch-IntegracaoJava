@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+// Estrutura mínima do ADF exigido pelo Jira para preencher o campo description via REST API v3.
 public class DescriptionDto
 {
+    // O Jira espera um documento com tipo e versão, mesmo quando a descrição contém apenas um texto.
     private String type = "doc";
     private Integer version = 1;
     private List<Object> content = new ArrayList<>();
@@ -13,6 +15,7 @@ public class DescriptionDto
     public DescriptionDto() {
     }
 
+    // Constrói um documento ADF com um único parágrafo de texto plano.
     public DescriptionDto(String text)
     {
         this.content.add(Map.of(

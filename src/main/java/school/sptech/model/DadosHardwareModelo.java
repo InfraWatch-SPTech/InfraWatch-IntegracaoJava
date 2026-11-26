@@ -10,8 +10,10 @@ import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 
+// Representa o JSON lido do S3, com campos principais do equipamento e métricas agregadas.
 public class DadosHardwareModelo
 {
+    // Identificam a origem do arquivo e permitem relacionar o conteúdo ao equipamento monitorado.
     private String empresa;
     private String equipamento;
 
@@ -35,9 +37,11 @@ public class DadosHardwareModelo
     @JsonAlias({"Rede_media", "rede_media", "Uso_da_rede_do_equipamento_media"})
     private Double redeMedia;
 
-    // Captura qualquer outra chave dinamicamente
+    // Captura métricas extras sem quebrar o parse quando o JSON trouxer chaves adicionais.
     private Map<String, Object> metricasExtras = new HashMap<>();
 
+    // Faz uma varredura no mapa de métricas extras para recuperar valores que não vieram mapeados
+    // de forma explícita, mantendo o modelo tolerante a variações do arquivo do S3.
     private Double buscarValorNoMapa(String... palavrasChave) {
         for (Map.Entry<String, Object> entry : metricasExtras.entrySet()) {
             String key = entry.getKey().toLowerCase();
