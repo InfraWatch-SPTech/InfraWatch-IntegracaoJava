@@ -66,6 +66,12 @@ public class S3Service
 
         Optional<S3Object> ultimoObjeto = listResponse.contents().stream()
                 .filter(objeto -> objeto.key().toLowerCase().endsWith(".json"))
+                // Os arquivos abaixos não deve entrar na leitura automática,
+                // porque ele não representa a coleta de métricas que gera alerta
+                .filter(objeto -> !objeto.key().toLowerCase().contains("captura_processos"))
+                .filter(objeto -> !objeto.key().toLowerCase().contains("dash-previsibilidade_captura"))
+                .filter(objeto -> !objeto.key().toLowerCase().contains("dash-previsibilidade_captura"))
+                .filter(objeto -> !objeto.key().toLowerCase().contains("dashboard"))
                 .max(Comparator.comparing(S3Object::lastModified));
 
         if (ultimoObjeto.isEmpty()) {
